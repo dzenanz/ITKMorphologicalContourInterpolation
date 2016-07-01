@@ -75,12 +75,12 @@ void doTest(std::string inFilename, std::string outFilename,
     {
     mci2->SetLabeledSliceIndices(i, indices[i]);
     }
-  mci2->Update();
+  //mci2->Update();
 
   typedef itk::RegionOfInterestImageFilter<myRLEImage, ImageType> outConverterType;
   outConverterType::Pointer outConv = outConverterType::New();
-  outConv->SetInput(mci2->GetOutput());
-  outConv->SetRegionOfInterest(mci2->GetOutput()->GetLargestPossibleRegion());
+  outConv->SetInput(mci->GetOutput());
+  outConv->SetRegionOfInterest(mci->GetOutput()->GetLargestPossibleRegion());
   outConv->Update();
 
   typedef itk::ImageFileWriter< ImageType > WriterType;
