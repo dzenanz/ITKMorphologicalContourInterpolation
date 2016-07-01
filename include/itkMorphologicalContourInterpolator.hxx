@@ -31,6 +31,9 @@
 #include "itkBinaryBallStructuringElement.h"
 #include "itkAndImageFilter.h"
 #include "itkOrImageFilter.h"
+#include "itkMultiThreader.h"
+#include "itkThreadedIndexedContainerPartitioner.h"
+#include "itkSimpleFastMutexLock.h"
 #include <climits>
 #include <utility>
 #include <algorithm>
@@ -594,6 +597,7 @@ MorphologicalContourInterpolator<TImage>
 
   typedef AndImageFilter<BoolSliceType, BoolSliceType, BoolSliceType> AndFilterType;
   thread_local typename AndFilterType::Pointer m_And = AndFilterType::New();
+  m_And->SetNumberOfThreads(1); //otherwise conflicts with C++11 threads
   m_And->SetInput(threshold->GetOutput());
   m_And->SetInput(1, orImage);
   m_And->GetOutput()->SetRequestedRegion(orImage->GetRequestedRegion());
@@ -810,11 +814,17 @@ MorphologicalContourInterpolator<TImage>
   ImageRegionConstIterator<BoolSliceType> seqIt(median, newRegion);
   ImageRegionIterator<TImage> outIt(out, outRegion);
   ImageRegionIterator<SliceType> midIt(midConn, newRegion);
+  static SimpleFastMutexLock mutex;
   while (!outIt.IsAtEnd())
     {
     if (seqIt.Get())
       {
-      outIt.Set(label);
+      mutex.Lock();
+      if (outIt.Get() < label)
+        {
+        outIt.Set(label);
+        }
+      mutex.Unlock();
       midIt.Set(1);
       }
     ++seqIt;
@@ -1510,13 +1520,10 @@ MorphologicalContourInterpolator<TImage>
       typename SliceSetType::iterator prev;
       if (m_UseCustomSlicePositions && m_Label != 0)
         {
-        prev = m_SliceSets[axis].begin();
-        }
-      else
-        {
-        prev = it->second.begin();
+        it->second = m_SliceSets[axis];
         }
 
+      prev = it->second.begin();
       if (prev == it->second.end())
         {
         continue; //nothing to do for this label
@@ -1530,16 +1537,7 @@ MorphologicalContourInterpolator<TImage>
       typename SliceType::Pointer iconn = this->RegionedConnectedComponents(ri, it->first, xCount);
       iconn->DisconnectPipeline();
 
-      typename SliceSetType::iterator next;
-      if (m_UseCustomSlicePositions && m_Label != 0)
-        {
-        next = m_SliceSets[axis].begin();
-        }
-      else
-        {
-        next = it->second.begin();
-        }
-
+      typename SliceSetType::iterator next = it->second.begin();
       for (++next; next != it->second.end(); ++next)
         {
         typename TImage::RegionType rj = ri;
